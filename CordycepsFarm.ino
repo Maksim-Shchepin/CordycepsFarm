@@ -10,6 +10,7 @@ Current version: 1.01 as of 30.05.2024
 
 */
 // check whether git finds the changes
+// it had
 //--------------------------------------------------Libraries
 
 #include <AHTxx.h>
