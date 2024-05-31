@@ -23,9 +23,8 @@ Current version: 1.01 as of 30.05.2024
 
 //--------------------------------------------------DEVICE
 
-#define DEVICE_NAME "CORDYFARM" // unique name of device
+#define DEVICE_NAME "CORDYFARM-TEST" // unique name of device
 #define DEVICE_NET "MyDevices" // unique prefix to prevent finding other devices via free mqtt
-#define DEVICE_ID 0x000000 // unique id
 
 //--------------------------------------------------WIFI
 
@@ -394,7 +393,7 @@ void initializeHubMQTT() {
 }
 
 void _initializeHub() {
-  hub.config(DEVICE_NET, DEVICE_NAME, "", DEVICE_ID); // net, name, icon, id
+  hub.config(DEVICE_NET, DEVICE_NAME, ""); // net, name, icon, id
   hub.onBuild(build);
   hub.begin();
   hub.onUnix(onUnix);
