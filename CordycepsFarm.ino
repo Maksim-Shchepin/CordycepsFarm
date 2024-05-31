@@ -11,12 +11,12 @@ Current version: 1.01 as of 30.05.2024
 */
 //--------------------------------------------------Libraries
 
-#include <AHTxx.h>
 #include <Preferences.h>
 #include "Timer.h"
 #include <WiFiManager.h>
 #include <SensirionI2cSht4x.h>
 #include <Wire.h>
+#include <PairsFile.h>
 
 #define GH_INCLUDE_PORTAL
 #include <GyverHub.h>
@@ -50,6 +50,21 @@ Current version: 1.01 as of 30.05.2024
 
 #define EEPROM_SAVE_DELAY 5000 //ms
 #define RESTART_DELAY 1000 //ms
+#define PAIRS_WRITE_DELAY 5000
+
+//--------------------------------------------------PAIRS
+
+#define H_EACH_TEN_SEC_FILE "/hEachTenSec.dat"
+#define H_EACH_MIN_FILE "/hEachMin.dat"
+#define H_EACH_TEN_MIN_FILE "/hEachTenMin.dat"
+#define H_EACH_HOUR_FILE "/hEachHour.dat"
+#define H_EACH_FOUR_HOUR_FILE "/hEachFourHour.dat"
+
+#define T_EACH_TEN_SEC_FILE "/tEachTenSec.dat"
+#define T_EACH_MIN_FILE "/tEachMin.dat"
+#define T_EACH_TEN_MIN_FILE "/tEachTenMin.dat"
+#define T_EACH_HOUR_FILE "/tEachHour.dat"
+#define T_EACH_FOUR_HOUR_FILE "/tEachFourHour.dat"
 
 //--------------------------------------------------SENSOR
 
@@ -59,7 +74,7 @@ Current version: 1.01 as of 30.05.2024
 #define MEASURING_CYCLE_TIME 10000 //ms
 #define SENSOR_DIDNT_START_ERROR 199
 #define SENSOR_DIDNT_READ_DATA 249
-#define EACH_MEASURING_BUFFER_SIZE 360
+#define MEASURING_BUFFER_SIZE 60
 
 //--------------------------------------------------CANVAS
 
@@ -128,13 +143,13 @@ uint8_t hMin = 20;
 uint8_t tMax = 50;
 uint8_t tMin = 10;
 
-uint8_t humidityBuffer[EACH_MEASURING_BUFFER_SIZE];
-uint8_t temperatureBuffer[EACH_MEASURING_BUFFER_SIZE];
+uint8_t humidityBuffer[MEASURING_BUFFER_SIZE];
+uint8_t temperatureBuffer[MEASURING_BUFFER_SIZE];
 
 int lightOnTime;
 int lightOffTime;
 
-unsigned long globalTimeOffset;
+unsigned long espRunStamp;
 int timeZone;
 int selectTimeZone;
 
@@ -171,6 +186,18 @@ WiFiManagerParameter mqttPassParam;
 Preferences preferences;
 GyverHub hub;
 SensirionI2cSht4x sensor;
+
+PairsFile hEachTenSec(&LittleFS, H_EACH_TEN_SEC_FILE, PAIRS_WRITE_DELAY);
+PairsFile hEachMin(&LittleFS, H_EACH_MIN_FILE, PAIRS_WRITE_DELAY);
+PairsFile hEachTenMin(&LittleFS, H_EACH_TEN_MIN_FILE, PAIRS_WRITE_DELAY);
+PairsFile hEachHour(&LittleFS, H_EACH_HOUR_FILE, PAIRS_WRITE_DELAY);
+PairsFile hEachFourHour(&LittleFS, H_EACH_FOUR_HOUR_FILE, PAIRS_WRITE_DELAY);
+
+PairsFile tEachTenSec(&LittleFS, T_EACH_TEN_SEC_FILE, PAIRS_WRITE_DELAY);
+PairsFile tEachMin(&LittleFS, T_EACH_MIN_FILE, PAIRS_WRITE_DELAY);
+PairsFile tEachTenMin(&LittleFS, T_EACH_TEN_MIN_FILE, PAIRS_WRITE_DELAY);
+PairsFile tEachHour(&LittleFS, T_EACH_HOUR_FILE, PAIRS_WRITE_DELAY);
+PairsFile tEachFourHour(&LittleFS, T_EACH_FOUR_HOUR_FILE, PAIRS_WRITE_DELAY);
 
 
 void setup() { //---------------------------------------------------------------------Setup
@@ -219,6 +246,18 @@ void workLoop() { //------------------------------------------------------------
 
   hub.tick();
 
+  hEachTenSec.tick();
+  hEachMin.tick();
+  hEachTenMin.tick();
+  hEachHour.tick();
+  hEachFourHour.tick();
+
+  tEachTenSec.tick();
+  tEachMin.tick();
+  tEachTenMin.tick();
+  tEachHour.tick();
+  tEachFourHour.tick();
+
   if (restartTimer.triggered()) {
     restartTimer.disable();
     ESP.restart();
@@ -238,6 +277,7 @@ void workLoop() { //------------------------------------------------------------
   if (tenSecTimer.triggered()) {
     getClimaticData();
     storeSensorDataToBuffer();
+    storeSensorData();
     showBufferedSensorData();
     updateClimateWidgets();
     lightControl();
@@ -473,8 +513,8 @@ void autoLightControl() {
     }
   }
 }
-// -------------------------------------------------------------------------------------Attached handlers
 
+// -------------------------------------------------------------------------------------Attached handlers
 
 void manualLightControlFlagChanged() {
   if (manualLightControlFlag) {
@@ -538,13 +578,13 @@ void continueSetupWifi() {
 }
 
 void getPortalParams() {
-  mqttServer = getParam("mqttServer");
-  mqttPort = getParam("mqttPort");
-  mqttUser = getParam("mqttUser");
-  mqttPass = getParam("mqttPass");
+  mqttServer = getPortalParam("mqttServer");
+  mqttPort = getPortalParam("mqttPort");
+  mqttUser = getPortalParam("mqttUser");
+  mqttPass = getPortalParam("mqttPass");
 }
 
-String getParam(String name) {
+String getPortalParam(String name) {
   String value;
   if(wifiManager.server->hasArg(name)) {
     value = wifiManager.server->arg(name);
@@ -594,11 +634,58 @@ void turnLightOff() {
 }
 
 void storeSensorDataToBuffer() {
-  for (int i = EACH_MEASURING_BUFFER_SIZE - 1; i > 0; i--) { 
+  for (int i = MEASURING_BUFFER_SIZE - 1; i > 0; i--) { 
     humidityBuffer[i] = humidityBuffer[i - 1];
     temperatureBuffer[i] = temperatureBuffer[i - 1];
   }
 }
+
+void storeSensorData() {
+  static uint32_t counter = 0;
+  String currentTimeSec = String(getLocalTimeSec());
+
+  if (hEachTenSec.amount() == MEASURING_BUFFER_SIZE) hEachTenSec.remove(0);
+  hEachTenSec.set(currentTimeSec, humidityBuffer[0]);
+
+  if (tEachTenSec.amount() == MEASURING_BUFFER_SIZE) tEachTenSec.remove(0);
+  tEachTenSec.set(currentTimeSec, temperatureBuffer[0]);
+
+  // each 6th time = 1 min
+  if (counter % 6 == 0) {
+    if (hEachMin.amount() == MEASURING_BUFFER_SIZE) hEachMin.remove(0);
+    hEachMin.set(currentTimeSec, humidityBuffer[0]);
+
+    if (tEachMin.amount() == MEASURING_BUFFER_SIZE) tEachMin.remove(0);
+    tEachMin.set(currentTimeSec, temperatureBuffer[0]);
+  } 
+  // each 60th time = 10 min
+  if (counter % 60 == 0) {
+    if (hEachTenMin.amount() == MEASURING_BUFFER_SIZE) hEachTenMin.remove(0);
+    hEachTenMin.set(currentTimeSec, humidityBuffer[0]);
+    
+    if (tEachTenMin.amount() == MEASURING_BUFFER_SIZE) tEachTenMin.remove(0);
+    tEachTenMin.set(currentTimeSec, temperatureBuffer[0]);
+  }
+  // each 360th time = 1 hour
+  if (counter % 360 == 0) {
+    if (hEachHour.amount() == MEASURING_BUFFER_SIZE) hEachHour.remove(0);
+    hEachHour.set(currentTimeSec, humidityBuffer[0]);
+
+    if (tEachHour.amount() == MEASURING_BUFFER_SIZE) tEachHour.remove(0);
+    tEachHour.set(currentTimeSec, temperatureBuffer[0]);
+  }
+  // each 1440th time = 4 hour
+  if (counter % 1440 == 0) {
+    if (hEachFourHour.amount() == MEASURING_BUFFER_SIZE) hEachFourHour.remove(0);
+    hEachFourHour.set(currentTimeSec, humidityBuffer[0]);
+
+    if (tEachFourHour.amount() == MEASURING_BUFFER_SIZE) tEachFourHour.remove(0);
+    tEachFourHour.set(currentTimeSec, temperatureBuffer[0]);
+  }
+
+  counter++;
+}
+
 
 void showBufferedSensorData() {
 
@@ -657,17 +744,17 @@ void drawGridLabels() {
 
 void drawHumidity() {
 
-  int step = (X_RES - XL_SHIFT - XR_SHIFT) / EACH_MEASURING_BUFFER_SIZE;
+  int step = (X_RES - XL_SHIFT - XR_SHIFT) / MEASURING_BUFFER_SIZE;
   gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
 
     canvas.strokeWeight(hWeight);
     canvas.stroke(hColor, hAlpha);
 
-    for (int i = 1; i < EACH_MEASURING_BUFFER_SIZE - 2; i++) {
+    for (int i = 1; i < MEASURING_BUFFER_SIZE - 2; i++) {
       if ((humidityBuffer[i] != 0) && (humidityBuffer[i + 1] != 0)) {
         
-        int X0 = XL_SHIFT + EACH_MEASURING_BUFFER_SIZE - i - step;
-        int X1 = XL_SHIFT + EACH_MEASURING_BUFFER_SIZE - i;
+        int X0 = XL_SHIFT + MEASURING_BUFFER_SIZE - i - step;
+        int X1 = XL_SHIFT + MEASURING_BUFFER_SIZE - i;
         int Y0 = yPoint(humidityBuffer[i + 1], hMin, hMax);
         int Y1 = yPoint(humidityBuffer[i], hMin, hMax);
 
@@ -679,17 +766,17 @@ void drawHumidity() {
 
 void drawTemperature() {
 
-  int step = (X_RES - XL_SHIFT - XR_SHIFT) / EACH_MEASURING_BUFFER_SIZE;
+  int step = (X_RES - XL_SHIFT - XR_SHIFT) / MEASURING_BUFFER_SIZE;
   gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
 
     canvas.strokeWeight(tWeight);
     canvas.stroke(tColor, tAlpha);
 
-    for (int i = 1; i < EACH_MEASURING_BUFFER_SIZE - 2; i++) {
+    for (int i = 1; i < MEASURING_BUFFER_SIZE - 2; i++) {
       if ((temperatureBuffer[i] != 0) && (temperatureBuffer[i + 1] != 0)) {
         
-        int X0 = XL_SHIFT + EACH_MEASURING_BUFFER_SIZE - i - step;
-        int X1 = XL_SHIFT + EACH_MEASURING_BUFFER_SIZE - i;
+        int X0 = XL_SHIFT + MEASURING_BUFFER_SIZE - i - step;
+        int X1 = XL_SHIFT + MEASURING_BUFFER_SIZE - i;
         int Y0 = yPoint(temperatureBuffer[i + 1], tMin, tMax);
         int Y1 = yPoint(temperatureBuffer[i], tMin, tMax);
 
@@ -940,32 +1027,34 @@ void saveBoolState(char* key, boolean value) {
   preferences.end();
 }
 
-
-
 void onUnix(uint32_t stamp) {
-  if (globalTimeOffset != 0) return;
-  globalTimeOffset = stamp - millis() / 1000;
+  if (espRunStamp != 0) return;
+  espRunStamp = stamp - millis() / 1000;
   timeZoneChanged();
 }
 
-unsigned long getCurrentGlobalTime() {
-  return globalTimeOffset + timeZone + millis() / 1000;
+unsigned long getLocalTimeSec() {
+  return espRunStamp + millis() / 1000;
+}
+
+unsigned long getLocalZonedTimeSec() {
+  return espRunStamp + timeZone + millis() / 1000;
 }
 
 unsigned long getCurrentTime() {
-  return getCurrentGlobalTime() % SEC_IN_DAY;
+  return getLocalZonedTimeSec() % SEC_IN_DAY;
 }
 
 int getCurrentHour() {
-  return getCurrentGlobalTime() / 3600 % 24; 
+  return getLocalZonedTimeSec() / 3600 % 24; 
 }
 
 int getCurrentMinute() {
-  return getCurrentGlobalTime() / 60 % 60;
+  return getLocalZonedTimeSec() / 60 % 60;
 }
 
 int getCurrentSecond() {
-  return getCurrentGlobalTime() % 60;
+  return getLocalZonedTimeSec() % 60;
 }
 
 
