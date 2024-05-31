@@ -1,0 +1,5 @@
+
+build/esp32.esp32.esp32/CordycepsFarm.ino.bootloader.bin
+build/esp32.esp32.esp32/CordycepsFarm.ino.elf
+build/esp32.esp32.esp32/CordycepsFarm.ino.map
+build/esp32.esp32.esp32/CordycepsFarm.ino.partitions.bin

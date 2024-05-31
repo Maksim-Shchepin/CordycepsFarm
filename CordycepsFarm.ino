@@ -9,8 +9,6 @@ Current version: 1.01 as of 30.05.2024
 **************************************************************************
 
 */
-// check whether git finds the changes
-// it had
 //--------------------------------------------------Libraries
 
 #include <AHTxx.h>
@@ -314,25 +312,42 @@ void build(gh::Builder& b) {
 // uint32_t gridColor = 0x3F3F3F;
 
   b.show(showChartSettings);
-  b.Label(F("ЛИНИЯ ВЛАЖНОСТИ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab();
-  b.Slider(&hWeight).label(F("ТОЛЩИНА ЛИНИИ")).range(1, 5, 1);
-  b.Slider(&hAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИИ")).range(1, 255, 1);
-  b.Slider(&hMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1);
-  b.Slider(&hMin).label(F("МИНИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1);
 
-  b.Label(F("ЛИНИЯ ТЕМПЕРАТУРЫ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab();
-  b.Slider(&tWeight).label(F("ТОЛЩИНА ЛИНИИ")).range(1, 5, 1);
-  b.Slider(&tAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИИ")).range(1, 255, 1);
-  b.Slider(&tMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1);
-  b.Slider(&tMin).label(F("МИНИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1);
-  
-  b.Label(F("ЛИНИИ СЕТКИ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab();
-  b.Slider(&gridWeight).label(F("ТОЛЩИНА ЛИНИЙ")).range(1, 5, 1);
-  b.Slider(&gridAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИЙ")).range(1, 255, 1);
-  b.Slider(&numYLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ Y")).range(1, 10, 1);
-  b.Slider(&numXLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ X")).range(1, 10, 1);
-  b.Slider(&labelTextAlpha).label(F("ПРОЗРАЧНОСТЬ ТЕКСТА")).range(1, 255, 1);
-  b.Space();
+  b.Label(F("ЛИНИЯ ВЛАЖНОСТИ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab();
+  b.beginRow();
+    b.Space().size(1);
+    b.Slider(&hWeight).label(F("ТОЛЩИНА ЛИНИИ")).range(1, 5, 1).size(10);
+    b.Space().size(1);
+  b.endRow();
+  b.beginRow();
+    b.Space().size(1);
+    b.Slider(&hAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИИ")).range(1, 255, 1).size(10);
+    b.Space().size(1);
+  b.endRow();
+  b.beginRow();
+    b.Space().size(1);
+    b.Slider(&hMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1).size(10);
+    b.Space().size(1);
+  b.endRow();
+  b.beginRow();
+    b.Space().size(1);
+    b.Slider(&hMin).label(F("МИНИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1).size(10);
+    b.Space().size(1);
+  b.endRow();
+
+    b.Label(F("ЛИНИЯ ТЕМПЕРАТУРЫ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab();
+    b.Slider(&tWeight).label(F("ТОЛЩИНА ЛИНИИ")).range(1, 5, 1);
+    b.Slider(&tAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИИ")).range(1, 255, 1);
+    b.Slider(&tMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1);
+    b.Slider(&tMin).label(F("МИНИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1);
+
+    b.Label(F("ЛИНИИ СЕТКИ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab();
+    b.Slider(&gridWeight).label(F("ТОЛЩИНА ЛИНИЙ")).range(1, 5, 1);
+    b.Slider(&gridAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИЙ")).range(1, 255, 1);
+    b.Slider(&numYLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ Y")).range(1, 10, 1);
+    b.Slider(&numXLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ X")).range(1, 10, 1);
+    b.Slider(&labelTextAlpha).label(F("ПРОЗРАЧНОСТЬ ТЕКСТА")).range(1, 255, 1);
+
 
 
 canvasUpdateTimer.enable(1000);
