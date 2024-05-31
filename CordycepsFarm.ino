@@ -73,8 +73,22 @@ Current version: 1.01 as of 30.05.2024
 #define XR_SHIFT 30
 #define YT_SHIFT 15
 #define YB_SHIFT 15
+#define HUMIDITY_MAX 100
+#define HUMIDITY_MIN 1
+#define TEMPERATURE_MAX 100
+#define TEMPERATURE_MIN 1
+#define ALPHA_MAX 255
+#define ALPHA_MIN 1
+#define LINE_WEIGHT_MAX 5
+#define LINE_WEIGHT_MIN 1
+#define INT_STEP 1
+#define NUM_X_LINES_MAX 11
+#define NUM_X_LINES_MIN 0
+#define NUM_Y_LINES_MAX 11
+#define NUM_Y_LINES_MIN 0
 
-//-----------------------------------------------------------------------------------Wiring
+//-----------------------------------------------------------------------------------WIRING
+
 #define LAMP_PIN 27
 
 //-----------------------------------------------------------------------------------Emulation
@@ -303,51 +317,59 @@ void build(gh::Builder& b) {
   b.Pass(&mqttPass).label(F("ПАРОЛЬ"));
   b.Space();
 
-  b.Flags(&backOrRestart).text(F("НАЗАД;СОХРАНИТЬ и ПЕРЕЗАПУСТИТЬ")).noLabel().attach(outOfSettings);
+  b.Flags(&backOrRestart).text(F("НАЗАД;ПЕРЕЗАПУСТИТЬ")).noLabel().attach(outOfSettings);
 
 //---------------------------------------------------------------------------------------------Chart-Settings
 // uint32_t hColor = 0x00ff00;
 // uint32_t tColor = 0x00ffff;
 // uint32_t gridColor = 0x3F3F3F;
+  gh::Color hLine = gh::Color(hColor, 1);
+  gh::Color tLine = gh::Color(tColor, 1);
+  gh::Color gLine = gh::Color(gridColor, 1);
 
   b.show(showChartSettings);
 
-  b.Label(F("ЛИНИЯ ВЛАЖНОСТИ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab();
+  b.Label(F("ЛИНИЯ ВЛАЖНОСТИ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab().color(hLine);
   b.beginRow();
-    b.Space().size(1);
-    b.Slider(&hWeight).label(F("ТОЛЩИНА ЛИНИИ")).range(1, 5, 1).size(10);
-    b.Space().size(1);
-  b.endRow();
-  b.beginRow();
-    b.Space().size(1);
-    b.Slider(&hAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИИ")).range(1, 255, 1).size(10);
-    b.Space().size(1);
-  b.endRow();
-  b.beginRow();
-    b.Space().size(1);
-    b.Slider(&hMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1).size(10);
-    b.Space().size(1);
-  b.endRow();
-  b.beginRow();
-    b.Space().size(1);
-    b.Slider(&hMin).label(F("МИНИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1).size(10);
-    b.Space().size(1);
+    b.Spinner(&hWeight).label(F("ТОЛЩИНА ЛИНИИ")).range(LINE_WEIGHT_MIN, LINE_WEIGHT_MAX, INT_STEP);
+    b.Spinner(&hAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИИ")).range(ALPHA_MIN, ALPHA_MAX, INT_STEP).hint(F("Диапазон [1..255], где максимальная прозрачность = 1, полная непрозрачность = 255"));
   b.endRow();
 
-    b.Label(F("ЛИНИЯ ТЕМПЕРАТУРЫ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab();
-    b.Slider(&tWeight).label(F("ТОЛЩИНА ЛИНИИ")).range(1, 5, 1);
-    b.Slider(&tAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИИ")).range(1, 255, 1);
-    b.Slider(&tMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1);
-    b.Slider(&tMin).label(F("МИНИМАЛЬНАЯ ГРАНИЦА")).range(1, 100, 1);
+  b.beginRow();
+    b.Spinner(&hMin).label(F("МИНИМАЛЬНАЯ ГРАНИЦА")).range(HUMIDITY_MIN, HUMIDITY_MAX, INT_STEP).size(10);
+    b.Spinner(&hMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(HUMIDITY_MIN, HUMIDITY_MAX, INT_STEP).size(10);
+  b.endRow();
 
-    b.Label(F("ЛИНИИ СЕТКИ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab();
-    b.Slider(&gridWeight).label(F("ТОЛЩИНА ЛИНИЙ")).range(1, 5, 1);
-    b.Slider(&gridAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИЙ")).range(1, 255, 1);
-    b.Slider(&numYLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ Y")).range(1, 10, 1);
-    b.Slider(&numXLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ X")).range(1, 10, 1);
-    b.Slider(&labelTextAlpha).label(F("ПРОЗРАЧНОСТЬ ТЕКСТА")).range(1, 255, 1);
+  b.Space();
 
+  b.Label(F("ЛИНИЯ ТЕМПЕРАТУРЫ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab().color(tLine);
+  b.beginRow();
+    b.Spinner(&tWeight).label(F("ТОЛЩИНА ЛИНИИ")).range(LINE_WEIGHT_MIN, LINE_WEIGHT_MAX, INT_STEP);
+    b.Spinner(&tAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИИ")).range(ALPHA_MIN, ALPHA_MAX, INT_STEP).hint(F("Диапазон [1..255], где максимальная прозрачность = 1, полная непрозрачность = 255"));
+  b.endRow();
 
+  b.beginRow();
+    b.Spinner(&tMin).label(F("МИНИМАЛЬНАЯ ГРАНИЦА")).range(TEMPERATURE_MIN, TEMPERATURE_MAX, INT_STEP);
+    b.Spinner(&tMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(TEMPERATURE_MIN, TEMPERATURE_MAX, INT_STEP);
+  b.endRow();
+  
+  b.Space();
+  
+  b.Label(F("ЛИНИИ СЕТКИ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab().color(gLine);
+  b.beginRow();
+    b.Spinner(&gridWeight).label(F("ТОЛЩИНА ЛИНИЙ")).range(LINE_WEIGHT_MIN, LINE_WEIGHT_MAX, INT_STEP);
+    b.Spinner(&gridAlpha).label(F("ПРОЗРАЧНОСТЬ ЛИНИЙ")).range(ALPHA_MIN, ALPHA_MAX, INT_STEP).hint(F("Диапазон [1..255], где максимальная прозрачность = 1, полная непрозрачность = 255"));
+  b.endRow();
+
+  b.beginRow();
+    b.Spinner(&numYLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ Y")).range(NUM_Y_LINES_MIN, NUM_Y_LINES_MAX, INT_STEP);
+    b.Spinner(&numXLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ X")).range(NUM_X_LINES_MIN, NUM_X_LINES_MAX, INT_STEP);
+  b.endRow();
+  b.Spinner(&labelTextAlpha).label(F("ПРОЗРАЧНОСТЬ ТЕКСТА")).range(ALPHA_MIN, ALPHA_MAX, INT_STEP).hint(F("Диапазон [1..255], где максимальная прозрачность = 1, полная непрозрачность = 255"));
+
+  b.Space();
+
+  b.Flags(&backOrRestart).text(F("НАЗАД;ПЕРЕЗАПУСТИТЬ")).noLabel().attach(outOfSettings);
 
 canvasUpdateTimer.enable(1000);
 }
