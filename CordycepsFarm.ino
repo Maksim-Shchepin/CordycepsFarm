@@ -161,6 +161,7 @@ static char errorMessage[64];
 static int16_t error;
 
 gh::Flags backOrRestart;
+gh::Flags canvasTimeScale = canvasTimeScale.flags = 1u;
 
 boolean manualLightControlFlag;
 boolean autoLightControlFlag;
@@ -311,6 +312,7 @@ void build(gh::Builder& b) {
 
   b.show(showDash);
   b.Canvas_(F(CANVAS_NAME), X_RES, Y_RES).noLabel();
+  b.Flags(&canvasTimeScale).text(F("10С;1М;10М;1Ч;4Ч")).noLabel().attach(canvasTimeScaleChanged);
   
   b.beginRow();
     b.Label(F("ВЛАЖНОСТЬ:")).noLabel().size(9).fontSize(titleFS).align(gh::Align::Left).noTab();
@@ -434,6 +436,38 @@ void outOfSettings() {
   }
   hub.sendRefresh();
 }
+
+void canvasTimeScaleChanged() {
+  static uint16_t mask = ~ 1u;
+
+  canvasTimeScale = canvasTimeScale.flags & mask;
+
+  if (canvasTimeScale.get(0) == 1) {
+    Serial.println("0");
+    //switch to 10s
+  }
+  if (canvasTimeScale.get(1) == 1) {
+    Serial.println("1");
+    //switch to 1m
+  }
+  if (canvasTimeScale.get(2) == 1) {
+    Serial.println("2");
+    //switch to 10m
+  }
+  if (canvasTimeScale.get(3) == 1) {
+    Serial.println("3");
+    //switch to 1h
+  }
+  if (canvasTimeScale.get(4) == 1) {
+    Serial.println("4");
+    //switch to 4h
+  }
+
+  mask = ~canvasTimeScale.flags;
+  hub.sendRefresh();
+}
+
+
 
 int yPoint(int value, int minValue, int maxValue) {
   int kY = (Y_RES - YB_SHIFT - YT_SHIFT) / (maxValue - minValue);
