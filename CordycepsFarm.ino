@@ -277,7 +277,7 @@ void workLoop() { //------------------------------------------------------------
   if (tenSecTimer.triggered()) {
     getClimaticData();
     storeSensorDataToBuffer();
-    storeSensorData();
+    // storeSensorData();
     showBufferedSensorData();
     updateClimateWidgets();
     lightControl();
@@ -696,8 +696,8 @@ void showBufferedSensorData() {
 
   drawGrid();
   drawGridLabels();
-  drawHumidity();
-  drawTemperature();
+  drawLine(humidityBuffer, hMax, hMin, hWeight, hColor, hAlpha);
+  drawLine(temperatureBuffer, tMax, tMin, tWeight, tColor, tAlpha);
   
 }
 
@@ -717,7 +717,7 @@ void drawGrid() {
       canvas.line(X0, Y0, X1, Y1);
     }
     for (int i = 0; i <= numXLines + 1; i++) {
-      int X0 = XL_SHIFT + (i * (X_RES - XL_SHIFT -XR_SHIFT) / (1 + numXLines));
+      int X0 = XL_SHIFT + (i * (X_RES - XL_SHIFT - XR_SHIFT) / (1 + numXLines));
       int X1 = X0;
       int Y0 = YT_SHIFT;
       int Y1 = Y_RES - YB_SHIFT;
@@ -742,43 +742,21 @@ void drawGridLabels() {
     }
 }
 
-void drawHumidity() {
+void drawLine(uint8_t data[], int max, int min, uint8_t weight, uint32_t color, uint8_t alpha) {
 
   int step = (X_RES - XL_SHIFT - XR_SHIFT) / MEASURING_BUFFER_SIZE;
   gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
 
-    canvas.strokeWeight(hWeight);
-    canvas.stroke(hColor, hAlpha);
+    canvas.strokeWeight(weight);
+    canvas.stroke(color, alpha);
 
     for (int i = 1; i < MEASURING_BUFFER_SIZE - 2; i++) {
-      if ((humidityBuffer[i] != 0) && (humidityBuffer[i + 1] != 0)) {
+      if ((data[i] != 0) && (data[i + 1] != 0)) {
         
-        int X0 = XL_SHIFT + MEASURING_BUFFER_SIZE - i - step;
-        int X1 = XL_SHIFT + MEASURING_BUFFER_SIZE - i;
-        int Y0 = yPoint(humidityBuffer[i + 1], hMin, hMax);
-        int Y1 = yPoint(humidityBuffer[i], hMin, hMax);
-
-        canvas.line(X0, Y0, X1, Y1);
-      }
-    }
-  canvas.send();
-}
-
-void drawTemperature() {
-
-  int step = (X_RES - XL_SHIFT - XR_SHIFT) / MEASURING_BUFFER_SIZE;
-  gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
-
-    canvas.strokeWeight(tWeight);
-    canvas.stroke(tColor, tAlpha);
-
-    for (int i = 1; i < MEASURING_BUFFER_SIZE - 2; i++) {
-      if ((temperatureBuffer[i] != 0) && (temperatureBuffer[i + 1] != 0)) {
-        
-        int X0 = XL_SHIFT + MEASURING_BUFFER_SIZE - i - step;
-        int X1 = XL_SHIFT + MEASURING_BUFFER_SIZE - i;
-        int Y0 = yPoint(temperatureBuffer[i + 1], tMin, tMax);
-        int Y1 = yPoint(temperatureBuffer[i], tMin, tMax);
+        int X0 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - (i + 1) * step;
+        int X1 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - i * step;
+        int Y0 = yPoint(data[i + 1], min, max);
+        int Y1 = yPoint(data[i], min, max);
 
         canvas.line(X0, Y0, X1, Y1);
       }
