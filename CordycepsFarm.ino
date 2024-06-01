@@ -477,13 +477,12 @@ void canvasTimeScaleChanged() {
 
 
 int yPoint(int value, int minValue, int maxValue) {
-  int kY = (Y_RES - YB_SHIFT - YT_SHIFT) / (maxValue - minValue);
-  int result = Y_RES - YT_SHIFT - kY * (value - minValue);
-  int min = Y_RES - YT_SHIFT;
-  int max = Y_RES - YT_SHIFT - kY * (maxValue - minValue);
-  if (result < max) return max;
-  if (result <= min) return result;
-  return min;
+  int result = Y_RES - YB_SHIFT - (Y_RES - YB_SHIFT - YT_SHIFT) * (value - minValue) / (maxValue - minValue) ;
+  int min = YT_SHIFT;
+  int max = Y_RES - YB_SHIFT;
+  if (result < min) return min;
+  if (result <= max) return result;
+  return max;
 }
 
 
@@ -729,17 +728,16 @@ void storeSensorData() {
 
 
 void showBufferedSensorData() {
-
   if (!hub.canSend()) return;
+
   gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
-    canvas.clear();
+  canvas.clear();
   canvas.send();
 
   drawGrid();
   drawGridLabels();
   drawLine(humidityBuffer, hMax, hMin, hWeight, hColor, hAlpha);
   drawLine(temperatureBuffer, tMax, tMin, tWeight, tColor, tAlpha);
-  
 }
 
 void drawGrid() {
