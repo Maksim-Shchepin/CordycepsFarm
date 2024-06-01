@@ -87,7 +87,7 @@ Current version: 1.01 as of 30.05.2024
 #define XL_SHIFT 30
 #define XR_SHIFT 30
 #define YT_SHIFT 15
-#define YB_SHIFT 15
+#define YB_SHIFT 30
 #define HUMIDITY_MAX 100
 #define HUMIDITY_MIN 1
 #define TEMPERATURE_MAX 100
@@ -101,6 +101,12 @@ Current version: 1.01 as of 30.05.2024
 #define NUM_X_LINES_MIN 0
 #define NUM_Y_LINES_MAX 11
 #define NUM_Y_LINES_MIN 0
+
+#define TEN_SEC_TIMEFRAME 10
+#define ONE_MIN_TIMEFRAME 60
+#define TEN_MIN_TIMEFRAME 600
+#define ONE_HOUR_TIMEFRAME 3600
+#define FOUR_HOUR_TIMEFRAME 14400
 
 //-----------------------------------------------------------------------------------WIRING
 
@@ -162,6 +168,7 @@ static int16_t error;
 
 gh::Flags backOrRestart;
 gh::Flags canvasTimeScale = canvasTimeScale.flags = 1u;
+int timeFrame = TEN_SEC_TIMEFRAME;
 
 boolean manualLightControlFlag;
 boolean autoLightControlFlag;
@@ -278,7 +285,7 @@ void workLoop() { //------------------------------------------------------------
   if (tenSecTimer.triggered()) {
     getClimaticData();
     storeSensorDataToBuffer();
-    // storeSensorData();
+    storeSensorData();
     showBufferedSensorData();
     updateClimateWidgets();
     lightControl();
@@ -444,23 +451,23 @@ void canvasTimeScaleChanged() {
 
   if (canvasTimeScale.get(0) == 1) {
     Serial.println("0");
-    //switch to 10s
+    timeFrame = TEN_SEC_TIMEFRAME;
   }
   if (canvasTimeScale.get(1) == 1) {
     Serial.println("1");
-    //switch to 1m
+    timeFrame = ONE_MIN_TIMEFRAME;
   }
   if (canvasTimeScale.get(2) == 1) {
     Serial.println("2");
-    //switch to 10m
+    timeFrame = TEN_MIN_TIMEFRAME;
   }
   if (canvasTimeScale.get(3) == 1) {
     Serial.println("3");
-    //switch to 1h
+    timeFrame = ONE_HOUR_TIMEFRAME;
   }
   if (canvasTimeScale.get(4) == 1) {
     Serial.println("4");
-    //switch to 4h
+    timeFrame = FOUR_HOUR_TIMEFRAME;
   }
 
   mask = ~canvasTimeScale.flags;
@@ -774,6 +781,14 @@ void drawGridLabels() {
       drawText(h, hColor, labelTextAlpha, XL_SHIFT - X_BORDER_LABEL_SHIFT - h.length() * NATIVE_FONT_INTERVAL, Y0 - Y_BORDER_LABEL_SHIFT);
       drawText(t, tColor, labelTextAlpha, X_RES - XR_SHIFT + X_BORDER_LABEL_SHIFT, Y0 - Y_BORDER_LABEL_SHIFT);
     }
+  uint32_t time = getLocalZonedTimeSec();
+    for (int i = 0; i <= numXLines + 1; i++) {
+      int X0 = XL_SHIFT + (i * (X_RES - XL_SHIFT - XR_SHIFT) / (1 + numXLines));
+
+      int axisTime = time - (numXLines + 1 - i) * ((X_RES - XL_SHIFT - XR_SHIFT) / (numXLines + 1)) / 2 * timeFrame;
+
+      drawText(getTimeHHMM(axisTime), hColor, labelTextAlpha, X0 - 15, Y_RES - YB_SHIFT + 10);
+    }
 }
 
 void drawLine(uint8_t data[], int max, int min, uint8_t weight, uint32_t color, uint8_t alpha) {
@@ -794,6 +809,36 @@ void drawLine(uint8_t data[], int max, int min, uint8_t weight, uint32_t color, 
 
         canvas.line(X0, Y0, X1, Y1);
       }
+    }
+  canvas.send();
+}
+
+void drawLineFromFile(int max, int min, uint8_t weight, uint32_t color, uint8_t alpha) {
+
+  Pair p = hEachTenSec.get(0);
+  uint32_t x = p.key;
+  uint16_t y = p;
+  Serial.print(x);Serial.print(" : ");
+  Serial.println(y);
+
+  // int x = getLocalTime() - p.key
+
+  int step = (X_RES - XL_SHIFT - XR_SHIFT) / MEASURING_BUFFER_SIZE;
+  gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
+
+    canvas.strokeWeight(weight);
+    canvas.stroke(color, alpha);
+
+    for (int i = 1; i < MEASURING_BUFFER_SIZE - 2; i++) {
+      // if ((data[i] != 0) && (data[i + 1] != 0)) {
+        
+      //   int X0 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - (i + 1) * step;
+      //   int X1 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - i * step;
+      //   int Y0 = yPoint(data[i + 1], min, max);
+      //   int Y1 = yPoint(data[i], min, max);
+
+      //   canvas.line(X0, Y0, X1, Y1);
+      // }
     }
   canvas.send();
 }
@@ -961,6 +1006,11 @@ void drawEqual(gh::Canvas* cv0, int xShift, int yShift) {
   for (int i = 0; i < 10; i++) cv0->point(xShift + p[i].x, yShift + p[i].y);
 }
 
+void drawColon(gh::Canvas* cv0, int xShift, int yShift) {
+  struct Point p[] = { {2, 6}, {2, 5}, {2, 3}, {2, 2}, {3, 6}, {3, 5}, {3, 3}, {3, 2}};
+  for (int i = 0; i < 8; i++) cv0->point(xShift + p[i].x, yShift + p[i].y);
+}
+
 void drawSymbol(gh::Canvas* cv0, char symbol, int xShift, int yShift) {
   switch(symbol) {
     case '1': drawOne(cv0, xShift, yShift);
@@ -996,6 +1046,8 @@ void drawSymbol(gh::Canvas* cv0, char symbol, int xShift, int yShift) {
     case 'H': drawH(cv0, xShift, yShift);
       break;
     case '=': drawEqual(cv0, xShift, yShift);
+      break;
+    case ':': drawColon(cv0, xShift, yShift);
       break;
     case ' ': break;
   }
@@ -1047,6 +1099,17 @@ void onUnix(uint32_t stamp) {
 
 unsigned long getLocalTimeSec() {
   return espRunStamp + millis() / 1000;
+}
+
+String getTimeHHMM(uint32_t time) {
+  int hour = time / 3600 % 24;
+  int min = time / 60 % 60;
+  String result;
+  if (hour < 10) result = "0";
+  result += String(hour) + ":";
+  if (min < 10) result += "0";
+  result += min;
+  return result;
 }
 
 unsigned long getLocalZonedTimeSec() {
