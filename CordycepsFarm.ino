@@ -84,6 +84,8 @@ Current version: 1.01 as of 30.05.2024
 #define Y_RES 430
 #define X_BORDER_LABEL_SHIFT 4
 #define Y_BORDER_LABEL_SHIFT 4
+#define X_AXIS_LABEL_SHIFT_X 15
+#define X_AXIS_LABEL_SHIFT_Y 10
 #define XL_SHIFT 30
 #define XR_SHIFT 30
 #define YT_SHIFT 15
@@ -127,7 +129,9 @@ String mqttPass = F("aaRYTT20");
 
 //-----------------------------------------------------------------------------------Canvas
 
-uint8_t labelTextAlpha = 128;
+uint8_t yLabelTextAlpha = 128;
+uint8_t xLabelTextAlpha = 255;
+uint32_t xTextColor = 0xffffff;
 
 uint8_t hWeight = 1;
 uint8_t hAlpha = 255;
@@ -389,7 +393,7 @@ void build(gh::Builder& b) {
     b.Spinner(&hMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(HUMIDITY_MIN, HUMIDITY_MAX, INT_STEP).size(10);
   b.endRow();
 
-  b.Space();
+  // b.Space();
 
   b.Label(F("ЛИНИЯ ТЕМПЕРАТУРЫ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab().color(tLine);
   b.beginRow();
@@ -402,7 +406,7 @@ void build(gh::Builder& b) {
     b.Spinner(&tMax).label(F("МАКСИМАЛЬНАЯ ГРАНИЦА")).range(TEMPERATURE_MIN, TEMPERATURE_MAX, INT_STEP);
   b.endRow();
   
-  b.Space();
+  // b.Space();
   
   b.Label(F("ЛИНИИ СЕТКИ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab().color(gLine);
   b.beginRow();
@@ -414,9 +418,16 @@ void build(gh::Builder& b) {
     b.Spinner(&numYLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ Y")).range(NUM_Y_LINES_MIN, NUM_Y_LINES_MAX, INT_STEP);
     b.Spinner(&numXLines).label(F("КОЛ-ВО ЛИНИЙ ПО ОСИ X")).range(NUM_X_LINES_MIN, NUM_X_LINES_MAX, INT_STEP);
   b.endRow();
-  b.Spinner(&labelTextAlpha).label(F("ПРОЗРАЧНОСТЬ ТЕКСТА")).range(ALPHA_MIN, ALPHA_MAX, INT_STEP).hint(F("Диапазон [1..255], где максимальная прозрачность = 1, полная непрозрачность = 255"));
 
-  b.Space();
+  // b.Space();
+
+  b.Label(F("ТЕКСТ НА ОСЯХ")).noLabel().fontSize(titleFS).align(gh::Align::Center).noTab().color(gLine);
+  b.beginRow();
+    b.Spinner(&yLabelTextAlpha).label(F("ПРОЗРАЧНОСТЬ ТЕКСТА ПО Y")).range(ALPHA_MIN, ALPHA_MAX, INT_STEP).hint(F("Диапазон [1..255], где максимальная прозрачность = 1, полная непрозрачность = 255"));
+    b.Spinner(&xLabelTextAlpha).label(F("ПРОЗРАЧНОСТЬ ТЕКСТА ПО X")).range(ALPHA_MIN, ALPHA_MAX, INT_STEP).hint(F("Диапазон [1..255], где максимальная прозрачность = 1, полная непрозрачность = 255"));
+  b.endRow();
+
+  // b.Space();
 
   b.Flags(&backOrRestart).text(F("НАЗАД;ПЕРЕЗАПУСТИТЬ")).noLabel().attach(outOfSettings);
 
@@ -450,23 +461,22 @@ void canvasTimeScaleChanged() {
   canvasTimeScale = canvasTimeScale.flags & mask;
 
   if (canvasTimeScale.get(0) == 1) {
-    Serial.println("0");
     timeFrame = TEN_SEC_TIMEFRAME;
   }
   if (canvasTimeScale.get(1) == 1) {
-    Serial.println("1");
+
     timeFrame = ONE_MIN_TIMEFRAME;
   }
   if (canvasTimeScale.get(2) == 1) {
-    Serial.println("2");
+
     timeFrame = TEN_MIN_TIMEFRAME;
   }
   if (canvasTimeScale.get(3) == 1) {
-    Serial.println("3");
+
     timeFrame = ONE_HOUR_TIMEFRAME;
   }
   if (canvasTimeScale.get(4) == 1) {
-    Serial.println("4");
+
     timeFrame = FOUR_HOUR_TIMEFRAME;
   }
 
@@ -477,7 +487,7 @@ void canvasTimeScaleChanged() {
 
 
 int yPoint(int value, int minValue, int maxValue) {
-  int result = Y_RES - YB_SHIFT - (Y_RES - YB_SHIFT - YT_SHIFT) * (value - minValue) / (maxValue - minValue) ;
+  int result = Y_RES - YB_SHIFT - (Y_RES - YB_SHIFT - YT_SHIFT) * (value - minValue) / (maxValue - minValue);
   int min = YT_SHIFT;
   int max = Y_RES - YB_SHIFT;
   if (result < min) return min;
@@ -485,7 +495,15 @@ int yPoint(int value, int minValue, int maxValue) {
   return max;
 }
 
-
+int xPoint(uint32_t value, uint8_t step, uint16_t timeFrame, uint32_t maxValue) {
+  int min = XL_SHIFT;
+  int max = X_RES - XR_SHIFT;
+  uint32_t minValue = maxValue - (X_RES - XR_SHIFT - XL_SHIFT) * timeFrame / step;
+  int result = XL_SHIFT + (X_RES - XR_SHIFT - XL_SHIFT) * (value - minValue) / (maxValue - minValue);
+  if (result < min) return -1; // too old value
+  if (result <= max) return result;
+  return -2; // too new value
+}
 
 void initializeHubMQTT() {
   int port = mqttPort.toInt();
@@ -681,8 +699,10 @@ void storeSensorDataToBuffer() {
 }
 
 void storeSensorData() {
+
+  if (espRunStamp == 0) return; // need someone connected and had translated unix time before saving anything
   static uint32_t counter = 0;
-  String currentTimeSec = String(getLocalTimeSec());
+  String currentTimeSec = String(getLocalZonedTimeSec());
 
   if (hEachTenSec.amount() == MEASURING_BUFFER_SIZE) hEachTenSec.remove(0);
   hEachTenSec.set(currentTimeSec, humidityBuffer[0]);
@@ -691,7 +711,7 @@ void storeSensorData() {
   tEachTenSec.set(currentTimeSec, temperatureBuffer[0]);
 
   // each 6th time = 1 min
-  if (counter % 6 == 0) {
+  if (counter % ONE_MIN_TIMEFRAME == 0) {
     if (hEachMin.amount() == MEASURING_BUFFER_SIZE) hEachMin.remove(0);
     hEachMin.set(currentTimeSec, humidityBuffer[0]);
 
@@ -699,7 +719,7 @@ void storeSensorData() {
     tEachMin.set(currentTimeSec, temperatureBuffer[0]);
   } 
   // each 60th time = 10 min
-  if (counter % 60 == 0) {
+  if (counter % TEN_MIN_TIMEFRAME == 0) {
     if (hEachTenMin.amount() == MEASURING_BUFFER_SIZE) hEachTenMin.remove(0);
     hEachTenMin.set(currentTimeSec, humidityBuffer[0]);
     
@@ -707,7 +727,7 @@ void storeSensorData() {
     tEachTenMin.set(currentTimeSec, temperatureBuffer[0]);
   }
   // each 360th time = 1 hour
-  if (counter % 360 == 0) {
+  if (counter % ONE_HOUR_TIMEFRAME == 0) {
     if (hEachHour.amount() == MEASURING_BUFFER_SIZE) hEachHour.remove(0);
     hEachHour.set(currentTimeSec, humidityBuffer[0]);
 
@@ -715,7 +735,7 @@ void storeSensorData() {
     tEachHour.set(currentTimeSec, temperatureBuffer[0]);
   }
   // each 1440th time = 4 hour
-  if (counter % 1440 == 0) {
+  if (counter % FOUR_HOUR_TIMEFRAME == 0) {
     if (hEachFourHour.amount() == MEASURING_BUFFER_SIZE) hEachFourHour.remove(0);
     hEachFourHour.set(currentTimeSec, humidityBuffer[0]);
 
@@ -723,12 +743,13 @@ void storeSensorData() {
     tEachFourHour.set(currentTimeSec, temperatureBuffer[0]);
   }
 
-  counter++;
+  counter += TEN_SEC_TIMEFRAME;
 }
 
 
 void showBufferedSensorData() {
   if (!hub.canSend()) return;
+  if (espRunStamp == 0) return; // need someone connected and had translated unix time before show anything
 
   gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
   canvas.clear();
@@ -736,8 +757,10 @@ void showBufferedSensorData() {
 
   drawGrid();
   drawGridLabels();
-  drawLine(humidityBuffer, hMax, hMin, hWeight, hColor, hAlpha);
-  drawLine(temperatureBuffer, tMax, tMin, tWeight, tColor, tAlpha);
+  // drawLine(humidityBuffer, hMax, hMin, hWeight, hColor, hAlpha);
+  // drawLine(temperatureBuffer, tMax, tMin, tWeight, tColor, tAlpha);
+  drawHumidityLine();
+  drawTemperatureLine();
 }
 
 void drawGrid() {
@@ -766,77 +789,132 @@ void drawGrid() {
 }
 
 void drawGridLabels() {
+
   String rH = F("RH %");
   String t = F("T *C");
-      drawText(rH, hColor, labelTextAlpha, XL_SHIFT, 0);
-      drawText(t, tColor, labelTextAlpha, X_RES - X_BORDER_LABEL_SHIFT - XR_SHIFT - t.length() * NATIVE_FONT_INTERVAL, 0);
+      drawText(rH, hColor, yLabelTextAlpha, XL_SHIFT, 0);
+      drawText(t, tColor, yLabelTextAlpha, X_RES - X_BORDER_LABEL_SHIFT - XR_SHIFT - t.length() * NATIVE_FONT_INTERVAL, 0);
+
     for (int i = 0; i <= numYLines + 1; i++) {
       int Y0 = YT_SHIFT + (i * (Y_RES - YT_SHIFT - YB_SHIFT) / (1 + numYLines));
       int hAxisValue = hMax - i * (hMax - hMin) / (numYLines + 1);
       int tAxisValue = tMax - i * (tMax - tMin) / (numYLines + 1);
       String h = String(hAxisValue) + "%";
       String t = String(tAxisValue) + "*";
-      drawText(h, hColor, labelTextAlpha, XL_SHIFT - X_BORDER_LABEL_SHIFT - h.length() * NATIVE_FONT_INTERVAL, Y0 - Y_BORDER_LABEL_SHIFT);
-      drawText(t, tColor, labelTextAlpha, X_RES - XR_SHIFT + X_BORDER_LABEL_SHIFT, Y0 - Y_BORDER_LABEL_SHIFT);
+      drawText(h, hColor, yLabelTextAlpha, XL_SHIFT - X_BORDER_LABEL_SHIFT - h.length() * NATIVE_FONT_INTERVAL, Y0 - Y_BORDER_LABEL_SHIFT);
+      drawText(t, tColor, yLabelTextAlpha, X_RES - XR_SHIFT + X_BORDER_LABEL_SHIFT, Y0 - Y_BORDER_LABEL_SHIFT);
     }
+
   uint32_t time = getLocalZonedTimeSec();
+  int step = (X_RES - XL_SHIFT - XR_SHIFT) / MEASURING_BUFFER_SIZE;
+
     for (int i = 0; i <= numXLines + 1; i++) {
       int X0 = XL_SHIFT + (i * (X_RES - XL_SHIFT - XR_SHIFT) / (1 + numXLines));
-
-      int axisTime = time - (numXLines + 1 - i) * ((X_RES - XL_SHIFT - XR_SHIFT) / (numXLines + 1)) / 2 * timeFrame;
-
-      drawText(getTimeHHMM(axisTime), hColor, labelTextAlpha, X0 - 15, Y_RES - YB_SHIFT + 10);
+      int axisTime = time - (numXLines + 1 - i) * ((X_RES - XL_SHIFT - XR_SHIFT) / (numXLines + 1)) / step * timeFrame;
+      drawText(getTimeHHMM(axisTime), xTextColor, xLabelTextAlpha, X0 - X_AXIS_LABEL_SHIFT_X, Y_RES - YB_SHIFT + X_AXIS_LABEL_SHIFT_Y);
     }
 }
 
-void drawLine(uint8_t data[], int max, int min, uint8_t weight, uint32_t color, uint8_t alpha) {
+// void drawLine(uint8_t data[], int max, int min, uint8_t weight, uint32_t color, uint8_t alpha) {
+  
 
+//   int step = (X_RES - XL_SHIFT - XR_SHIFT) / MEASURING_BUFFER_SIZE;
+//   gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
+
+//     canvas.strokeWeight(weight);
+//     canvas.stroke(color, alpha);
+
+//     for (int i = 1; i < MEASURING_BUFFER_SIZE - 2; i++) {
+//       if ((data[i] != 0) && (data[i + 1] != 0)) {
+        
+//         int X0 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - (i + 1) * step;
+//         int X1 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - i * step;
+//         int Y0 = yPoint(data[i + 1], min, max);
+//         int Y1 = yPoint(data[i], min, max);
+
+//         canvas.line(X0, Y0, X1, Y1);
+//       }
+//     }
+//   canvas.send();
+// }
+
+void drawHumidityLine() {
+  drawLineFromFile(0, hMax, hMin, hWeight, hColor, hAlpha);
+}
+
+void drawTemperatureLine() {
+  drawLineFromFile(1, tMax, tMin, tWeight, tColor, tAlpha);
+}
+
+void drawLineFromFile(uint8_t numCurve, int max, int min, uint8_t weight, uint32_t color, uint8_t alpha) {
+
+  if (numCurve == 0) { //humidity
+    switch (timeFrame) {
+      case TEN_SEC_TIMEFRAME : drawLineFromFile0(&hEachTenSec, max, min, weight, color, alpha);
+      break;
+      case ONE_MIN_TIMEFRAME : drawLineFromFile0(&hEachMin, max, min, weight, color, alpha);
+      break;
+      case TEN_MIN_TIMEFRAME : drawLineFromFile0(&hEachTenMin, max, min, weight, color, alpha);
+      break;
+      case ONE_HOUR_TIMEFRAME : drawLineFromFile0(&hEachHour, max, min, weight, color, alpha);
+      break;
+      case FOUR_HOUR_TIMEFRAME : drawLineFromFile0(&hEachFourHour, max, min, weight, color, alpha);
+      break;
+    }
+  }
+
+  if (numCurve == 1) { //temperature
+    switch (timeFrame) {
+      case TEN_SEC_TIMEFRAME : drawLineFromFile0(&tEachTenSec, max, min, weight, color, alpha);
+      break;
+      case ONE_MIN_TIMEFRAME : drawLineFromFile0(&tEachMin, max, min, weight, color, alpha);
+      break;
+      case TEN_MIN_TIMEFRAME : drawLineFromFile0(&tEachTenMin, max, min, weight, color, alpha);
+      break;
+      case ONE_HOUR_TIMEFRAME : drawLineFromFile0(&tEachHour, max, min, weight, color, alpha);
+      break;
+      case FOUR_HOUR_TIMEFRAME : drawLineFromFile0(&tEachFourHour, max, min, weight, color, alpha);
+      break;
+    }
+  }
+  
+}
+
+void drawLineFromFile0(PairsFile* data, int max, int min, uint8_t weight, uint32_t color, uint8_t alpha) {
+
+  uint32_t currentTime = getLocalZonedTimeSec();
   int step = (X_RES - XL_SHIFT - XR_SHIFT) / MEASURING_BUFFER_SIZE;
   gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
 
     canvas.strokeWeight(weight);
     canvas.stroke(color, alpha);
+    // Serial.print("data->amount: ");Serial.println(data->amount());
+    for (int i = 0; i < data->amount() - 1; i++) {
+      // Serial.print("i: ");Serial.println(i);
+        Pair p0 = data->get(i + 1);
+        Pair p1 = data->get(i);
+        uint32_t x0_value = p0.key;
+        uint16_t y0_value = p0;
+        uint32_t x1_value = p1.key;
+        uint16_t y1_value = p1;
+        // Serial.println();
+        // Serial.print(x0_value);Serial.print(" x0:y0 ");Serial.println(y0_value);
+        // Serial.print(x1_value);Serial.print(" x1:y1 ");Serial.println(y1_value);
 
-    for (int i = 1; i < MEASURING_BUFFER_SIZE - 2; i++) {
-      if ((data[i] != 0) && (data[i + 1] != 0)) {
+      if ((y0_value != 0) && (y1_value != 0)) {
         
-        int X0 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - (i + 1) * step;
-        int X1 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - i * step;
-        int Y0 = yPoint(data[i + 1], min, max);
-        int Y1 = yPoint(data[i], min, max);
-
+        int X0 = xPoint(x0_value, step, timeFrame, currentTime);
+        // Serial.print("X0: ");Serial.println(X0);
+        if (X0 < 0) continue;
+        int X1 = xPoint(x1_value, step, timeFrame, currentTime);
+        // Serial.print("X1: ");Serial.println(X1);
+        if (X1 < 0) continue;
+        int Y0 = yPoint(y0_value, min, max);
+        int Y1 = yPoint(y1_value, min, max);
+        // Serial.print("Y0: ");Serial.println(Y0);
+        // Serial.print("Y1: ");Serial.println(Y1);
         canvas.line(X0, Y0, X1, Y1);
       }
-    }
-  canvas.send();
-}
-
-void drawLineFromFile(int max, int min, uint8_t weight, uint32_t color, uint8_t alpha) {
-
-  Pair p = hEachTenSec.get(0);
-  uint32_t x = p.key;
-  uint16_t y = p;
-  Serial.print(x);Serial.print(" : ");
-  Serial.println(y);
-
-  // int x = getLocalTime() - p.key
-
-  int step = (X_RES - XL_SHIFT - XR_SHIFT) / MEASURING_BUFFER_SIZE;
-  gh::CanvasUpdate canvas(CANVAS_NAME, &hub);
-
-    canvas.strokeWeight(weight);
-    canvas.stroke(color, alpha);
-
-    for (int i = 1; i < MEASURING_BUFFER_SIZE - 2; i++) {
-      // if ((data[i] != 0) && (data[i + 1] != 0)) {
-        
-      //   int X0 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - (i + 1) * step;
-      //   int X1 = XL_SHIFT + MEASURING_BUFFER_SIZE * step - i * step;
-      //   int Y0 = yPoint(data[i + 1], min, max);
-      //   int Y1 = yPoint(data[i], min, max);
-
-      //   canvas.line(X0, Y0, X1, Y1);
-      // }
     }
   canvas.send();
 }
